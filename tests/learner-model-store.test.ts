@@ -37,10 +37,19 @@ test("learner model store migrates, reopens, and retains versioned provenance", 
 			}],
 		};
 		store.writeLearnerModel(model);
-		// The Stage-1 adapter remains replace-whole internally; rewriting a
-		// versioned model must still satisfy its self-referential FK history.
+		store.writeLearnerModelLayout({
+			version: 1,
+			targetId: "target_1",
+			positions: [{ conceptId: "concept_1", x: 120, y: 45 }],
+		});
+		// Semantic rewrites must preserve the separate stable-lineage layout.
 		store.writeLearnerModel(model);
 		assert.deepEqual(store.readLearnerModel("target_1"), model);
+		assert.deepEqual(store.readLearnerModelLayout("target_1"), {
+			version: 1,
+			targetId: "target_1",
+			positions: [{ conceptId: "concept_1", x: 120, y: 45 }],
+		});
 		assert.deepEqual(createStudyContextStore(temp.file).readLearnerModel("target_1"), model);
 
 		// Writing later Stage-1 context must not rebuild targets and lose the
@@ -51,6 +60,7 @@ test("learner model store migrates, reopens, and retains versioned provenance", 
 		assert.deepEqual(store.readLearnerModel("target_1"), model);
 		assert.throws(() => store.writeStudyContext(emptyStudyContext()), /FOREIGN KEY/);
 		assert.throws(() => store.writeLearnerModel({ ...model, targetId: "missing_target" }), /FOREIGN KEY/);
+		assert.throws(() => store.writeLearnerModelLayout({ version: 1, targetId: "target_1", positions: [{ conceptId: "outside", x: 0, y: 0 }] }), /outside/);
 	} finally {
 		temp.cleanup();
 	}

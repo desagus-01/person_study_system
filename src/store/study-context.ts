@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { LEARNING_DB_FILE } from "../../config.ts";
-import type { LearnerModelStore, StudyContextStore } from "../core/ports.ts";
+import type { LearnerModelLayoutStore, LearnerModelStore, StudyContextStore } from "../core/ports.ts";
 import {
 	emptyStudyContext,
 	parseStudyContext,
@@ -11,8 +11,9 @@ import {
 	type StudyReferenceKind,
 } from "../core/study-context.ts";
 import { parseLearnerModel, type LearnerModelState } from "../core/learner-model.ts";
+import { parseLearnerModelLayout, type LearnerModelLayoutState } from "../core/learner-model-layout.ts";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const REFERENCE_KINDS: StudyReferenceKind[] = ["graph_node", "graph_chain", "notes_source"];
 
 function openDatabase(databasePath: string): Database.Database {
@@ -105,6 +106,16 @@ function migrate(db: Database.Database): void {
 			);
 		`);
 		db.pragma("user_version = 3");
+	}
+	if (version < 4) {
+		db.exec(`
+			CREATE TABLE learner_concept_positions (
+				concept_id TEXT PRIMARY KEY REFERENCES learner_concepts(id) ON DELETE CASCADE,
+				x REAL NOT NULL,
+				y REAL NOT NULL
+			);
+		`);
+		db.pragma("user_version = 4");
 	}
 }
 
@@ -250,9 +261,12 @@ function mapLearnerModel(db: Database.Database, targetId: string): LearnerModelS
 function writeLearnerModel(db: Database.Database, input: LearnerModelState): void {
 	const state = parseLearnerModel(input);
 	const write = db.transaction((next: LearnerModelState) => {
-		// Supersession links are intentionally restrictive so history cannot be
-		// deleted accidentally. This replace-whole adapter therefore clears only
-		// the outgoing self-links inside its transaction before replacing a model.
+		// The Stage-2 semantic adapter is still replace-whole internally. Capture
+		// presentation state first so rewriting immutable semantic history cannot
+		// move nodes or make layout part of a concept version.
+		const retainedPositions = db.prepare(`SELECT learner_concept_positions.concept_id AS conceptId, x, y
+			FROM learner_concept_positions JOIN learner_concepts ON learner_concepts.id = learner_concept_positions.concept_id
+			WHERE learner_concepts.model_target_id = ?`).all(next.targetId) as Array<{ conceptId: string; x: number; y: number }>;
 		db.prepare(`DELETE FROM learner_relationship_source_links WHERE relationship_version_id IN (
 			SELECT learner_relationship_versions.id FROM learner_relationship_versions
 			JOIN learner_relationships ON learner_relationships.id = learner_relationship_versions.relationship_id
@@ -282,11 +296,40 @@ function writeLearnerModel(db: Database.Database, input: LearnerModelState): voi
 			insertRelationshipVersion.run(version.id, version.relationshipId, version.sourceConceptVersionId, version.targetConceptVersionId, version.propositionLabel, version.supersedesId, version.createdAt);
 			for (const link of version.sourceLinks) insertSourceLink.run(version.id, link.kind, link.refId, link.refSnapshot === undefined ? null : JSON.stringify(link.refSnapshot));
 		}
+		const currentConceptIds = new Set(next.concepts.map((concept) => concept.id));
+		const restorePosition = db.prepare("INSERT INTO learner_concept_positions (concept_id, x, y) VALUES (?, ?, ?)");
+		for (const position of retainedPositions) {
+			if (currentConceptIds.has(position.conceptId)) restorePosition.run(position.conceptId, position.x, position.y);
+		}
 	});
 	write(state);
 }
 
-export function createStudyContextStore(databasePath: string): StudyContextStore & LearnerModelStore {
+function mapLearnerModelLayout(db: Database.Database, targetId: string): LearnerModelLayoutState | null {
+	const model = db.prepare("SELECT target_id FROM learner_models WHERE target_id = ?").get(targetId);
+	if (!model) return null;
+	const positions = db.prepare(`SELECT learner_concept_positions.concept_id AS conceptId, x, y
+		FROM learner_concept_positions JOIN learner_concepts ON learner_concepts.id = learner_concept_positions.concept_id
+		WHERE learner_concepts.model_target_id = ? ORDER BY learner_concepts.created_at, learner_concepts.id`).all(targetId);
+	return parseLearnerModelLayout({ version: 1, targetId, positions });
+}
+
+function writeLearnerModelLayout(db: Database.Database, input: LearnerModelLayoutState): void {
+	const state = parseLearnerModelLayout(input);
+	const write = db.transaction((next: LearnerModelLayoutState) => {
+		const knownConcepts = new Set((db.prepare("SELECT id FROM learner_concepts WHERE model_target_id = ?").all(next.targetId) as Array<{ id: string }>).map((row) => row.id));
+		if (!db.prepare("SELECT 1 FROM learner_models WHERE target_id = ?").get(next.targetId)) throw new Error("Learner model does not exist.");
+		for (const position of next.positions) if (!knownConcepts.has(position.conceptId)) throw new Error("Layout contains a concept outside this learner model.");
+		db.prepare(`DELETE FROM learner_concept_positions WHERE concept_id IN (
+			SELECT id FROM learner_concepts WHERE model_target_id = ?
+		)`).run(next.targetId);
+		const insert = db.prepare("INSERT INTO learner_concept_positions (concept_id, x, y) VALUES (?, ?, ?)");
+		for (const position of next.positions) insert.run(position.conceptId, position.x, position.y);
+	});
+	write(state);
+}
+
+export function createStudyContextStore(databasePath: string): StudyContextStore & LearnerModelStore & LearnerModelLayoutStore {
 	return {
 		readStudyContext() {
 			return withDatabase(databasePath, mapState);
@@ -300,10 +343,16 @@ export function createStudyContextStore(databasePath: string): StudyContextStore
 		writeLearnerModel(state) {
 			withDatabase(databasePath, (db) => writeLearnerModel(db, state));
 		},
+		readLearnerModelLayout(targetId) {
+			return withDatabase(databasePath, (db) => mapLearnerModelLayout(db, targetId));
+		},
+		writeLearnerModelLayout(state) {
+			withDatabase(databasePath, (db) => writeLearnerModelLayout(db, state));
+		},
 	};
 }
 
-export const studyContextStore: StudyContextStore & LearnerModelStore = createStudyContextStore(LEARNING_DB_FILE);
+export const studyContextStore: StudyContextStore & LearnerModelStore & LearnerModelLayoutStore = createStudyContextStore(LEARNING_DB_FILE);
 
 // Transitional utility for tests/scripts that need a known-empty baseline.
 export function resetStudyContextForTests(databasePath: string): void {

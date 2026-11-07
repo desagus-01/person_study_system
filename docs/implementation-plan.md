@@ -10,7 +10,7 @@ Related: [index](README.md), [product](product.md), [learning framework](learnin
 
 The fork is the host application. The original project's **Stage 7 — Misconceptions and learner model** is reference context only, not this fork's stage. Do not continue its unfinished IPC/UI work here.
 
-Documentation alignment is complete: all seven documentation-migration steps have been reviewed. Stage 0 baseline checks and fork-safety verification are complete for the approved Linux-only personal-use scope. Stage 1 SQLite foundation/minimum context is complete. Stage 2 is active: S2-CT1 is complete and S2-CT2 is next.
+Documentation alignment is complete: all seven documentation-migration steps have been reviewed. Stage 0 baseline checks and fork-safety verification are complete for the approved Linux-only personal-use scope. Stage 1 SQLite foundation/minimum context is complete. Stage 2 is active: S2-CT1 and S2-CT2 are complete; S2-CT3 is next.
 
 ## Baseline and approved decisions
 
@@ -152,9 +152,12 @@ Versioning, provenance, explicit acceptance and graph/layout separation tests pa
   zero-or-more graph-node/graph-chain/notes-source provenance links with
   snapshots. This target is server-internal only: no workspace UI, passage
   links, or proposal-resolution behaviour.
-- **S2-CT2 — Graph/layout separation and focused workspace:**
-  persist layout separately from learner semantics and add the focused React
-  Flow authoring workspace using the existing dependency.
+- **S2-CT2 — Graph/layout separation and focused workspace (done):**
+  persists target-scoped concept positions separately from immutable learner
+  semantics and provides a direct-target React Flow workspace for creating and
+  revising concepts and proposition-labelled relationships. Model evaluation,
+  feedback, provenance selection, deletion and proposal resolution remain
+  outside this target.
 - **S2-CT3 — Teaching/reference selection bridge:**
   allow deliberate selection of available reference propositions/chains into
   learner organisation; define and implement teaching-passage links only after
@@ -185,10 +188,11 @@ State/transition, source/hint/reveal timing, refresh/reconnect, duplicate submis
 ### Slices
 
 1. Associate a goal and selected teaching context with learner-generated relationships.
-2. Capture immutable baselines and implement source-hidden small-map reconstruction plus a focused explanation/teach-back task.
-3. Adapt auditable bounded diagnostic/coaching calls to the host's Pi engine/provider seam. Validate expected judgement coverage, known IDs, source references and learner spans; preserve uncertain/ungradable outcomes.
-4. Keep structural recovery distinct from correctness/equivalence. Specify how reference-grounded assessment handles paraphrases, incorrect learner baselines and valid alternative explanations.
-5. Adapt the deterministic interval baseline and review observations; expose a due-review action that uses the same attempt/condition system.
+2. Snapshot a learner-authored map submission and evaluate its concepts and proposition-labelled relationships against bounded target/reference context. Return source-grounded, auditable feedback without silently rewriting the learner map; preserve uncertainty, omissions and valid alternatives rather than forcing a corrected canonical map.
+3. Capture immutable baselines and implement source-hidden small-map reconstruction plus a focused explanation/teach-back task.
+4. Adapt auditable bounded diagnostic/coaching calls to the host's Pi engine/provider seam. Validate expected judgement coverage, known IDs, source references and learner spans; preserve uncertain/ungradable outcomes.
+5. Keep structural recovery distinct from correctness/equivalence. Specify how reference-grounded assessment handles paraphrases, incorrect learner baselines and valid alternative explanations.
+6. Adapt the deterministic interval baseline and review observations; expose a due-review action that uses the same attempt/condition system.
 
 ### Affected areas / risks
 
@@ -196,7 +200,7 @@ Learner workspace, retention task/review UI, agent context/output contracts, ser
 
 ### Checks and exit — first useful milestone
 
-With an injected model and disposable data, complete teaching link → learner model → unsupported retrieval → feedback → persisted later review, then restart and complete that review. Test assisted/unknown/unsound paths, failed model calls and incorrect-baseline cases. Only qualifying evidence affects independent-success scheduling. A configured live-model inspection, if authorised, is reported separately from deterministic tests and does not replace them.
+With an injected model and disposable data, complete teaching link → learner-authored map → bounded map feedback → unsupported retrieval → feedback → persisted later review, then restart and complete that review. Test map omissions, incorrect relationships, valid alternatives, uncertainty, assisted/unknown/unsound paths, failed model calls and incorrect-baseline cases. Map feedback must cite the submitted snapshot and supplied references and must not mutate canonical learner semantics. Only qualifying evidence affects independent-success scheduling. A configured live-model inspection, if authorised, is reported separately from deterministic tests and does not replace them.
 
 Stop and evaluate this loop before broadening the application. Course-document automation, handwriting and coding assessment are not prerequisites to validate it.
 
@@ -401,11 +405,12 @@ Linux-only personal-use scope.
 
 Current position (2026-11-06): S1-CT1 through S1-CT4 remain complete.
 Stage 2 is active. S2-CT1 (versioned learner-model core and reference bridge)
-is complete: each existing target can own one learner model with append-only
-superseding concept/relationship versions and graph-node/graph-chain/notes-source
-provenance links. S2-CT2 (graph/layout separation and a focused workspace) is
-next and needs its concrete UI/interaction plan before implementation. No
-Stage-2 exit criterion is complete yet.
+and S2-CT2 (graph/layout separation and focused authoring workspace) are
+complete. S2-CT3 (deliberate teaching/reference selection bridge) is next and
+needs its stable selection/reference contract before implementation. Stage-2
+versioning and graph/layout separation checks are now represented; the full
+Stage-2 exit remains incomplete until the selection bridge, proposal behaviour
+and their interaction coverage are complete.
 
 Implemented in the Stage-1 checkpoint:
 
@@ -477,3 +482,57 @@ Verification run:
 - `node scripts/smoke-sqlite-runtime.mjs` (pass in host Node and Electron's
   bundled Node runtime)
 - `node scripts/build-server.mjs && node scripts/smoke-server.mjs && node scripts/smoke-server.mjs --electron` (pass)
+
+### Stage 2 S2-CT2 graph/layout separation and focused workspace — complete
+
+Implemented:
+
+- Added a browser-safe learner-model layout contract keyed by stable concept
+  lineage IDs. Layout contains only finite target-scoped positions; semantic
+  concept/relationship versions remain unchanged and separately persisted.
+- Added SQLite migration 4 and layout persistence. The existing replace-whole
+  semantic adapter now retains positions transactionally across semantic
+  revisions, while layout writes reject concepts outside the target model.
+- Extended the learner-model service with a serialisable workspace projection,
+  validated layout writes and an HTTP response seam with explicit missing-target
+  and invalid-input responses.
+- Added `GET`/`PATCH`/`PUT` transport at
+  `/api/study/targets/[targetId]/learner-model` and a direct-target workspace at
+  `/study/targets/[targetId]/model` using the existing React Flow dependency.
+- The workspace supports adding and revising learner concepts, dragging a
+  directed connection and requiring a proposition label before persistence,
+  revising relationship propositions, and saving concept positions on drag
+  completion. Deletion, provenance picking, proposals and model evaluation are
+  deliberately not included.
+- Recorded the owner-approved remaining workflow in Stage 4: snapshot and
+  evaluate a learner-authored map against bounded references, provide auditable
+  feedback without silently mutating the map, and preserve uncertainty and
+  valid alternatives.
+
+Verification run:
+
+- Focused Stage-1/Stage-2 contract, store, service, HTTP and workspace tests
+  (21/21 pass), including a mounted client interaction that submits a concept
+  write and renders the returned node.
+- `npm test` (3,173/3,173 pass).
+- `npm run typecheck` (pass).
+- `npm run lint` (pass with the pre-existing `@next/next/no-head-element`
+  warning in `tests/source-name-ui.test.tsx`).
+- `npm run build` (pass with four pre-existing Turbopack dynamic-filesystem
+  tracing warnings).
+- `node scripts/smoke-sqlite-runtime.mjs` (pass in host Node and Electron's
+  bundled Node runtime).
+- `node scripts/build-server.mjs && node scripts/smoke-server.mjs && node scripts/smoke-server.mjs --electron` (pass).
+
+Limitations:
+
+- The workspace is intentionally a direct target route because goal/target
+  management has no approved user-facing navigation yet.
+- Automated browser launch was unavailable in this environment because the
+  Playwright Chrome distribution is not installed. The mounted React DOM test,
+  production build, route boot and standalone smoke paths passed; no claim of a
+  separate real-browser visual inspection is made.
+- The local Node 26 toolchain used in the Stage-0 baseline was not available in
+  this session. Application checks ran under host Node `v22.23.4`; the Electron
+  runtime probes used bundled Node `v24.22.0`. Node 26 remains covered by the
+  earlier baseline, but this exact S2-CT2 patch was not re-run under Node 26.

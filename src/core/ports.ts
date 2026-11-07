@@ -29,6 +29,7 @@ import type {
 import type { UserSettings } from "./settings.ts";
 import type { StudyContextState } from "./study-context.ts";
 import type { LearnerModelState } from "./learner-model.ts";
+import type { LearnerModelLayoutState } from "./learner-model-layout.ts";
 
 // ─── ChatStore — the session record's home (data/chats) ─────────────────────
 
@@ -205,6 +206,13 @@ export interface StudyContextStore {
 export interface LearnerModelStore {
 	readLearnerModel(targetId: string): LearnerModelState | null;
 	writeLearnerModel(state: LearnerModelState): void;
+}
+
+// ─── LearnerModelLayoutStore — presentation state kept outside semantics ───
+
+export interface LearnerModelLayoutStore {
+	readLearnerModelLayout(targetId: string): LearnerModelLayoutState | null;
+	writeLearnerModelLayout(state: LearnerModelLayoutState): void;
 }
 
 // ─── PromptOverrideStore — per-segment system-prompt overrides (2026-09-19) ──
