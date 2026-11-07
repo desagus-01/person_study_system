@@ -1,5 +1,5 @@
 {
-	"name": "learnharness",
+	"name": "person-study-system",
 	"version": "0.4.1",
 	"license": "AGPL-3.0-only",
 	"author": {
@@ -7,7 +7,7 @@
 		"email": "255718537+amosblomqvist@users.noreply.github.com"
 	},
 	"homepage": "https://github.com/amosblomqvist/learnharness",
-	"desktopName": "learnharness.desktop",
+	"desktopName": "person-study-system.desktop",
 	"description": "An agent harness for learning: adaptive teaching, practice, and a persistent knowledge graph.",
 	"type": "module",
 	"private": true,
@@ -38,6 +38,7 @@
 		"@streamdown/mermaid": "^1.0.2",
 		"@xyflow/react": "^12.11.3",
 		"ansi-to-react": "^6.2.6",
+		"better-sqlite3": "^13.0.3",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"cmdk": "^1.1.1",
@@ -55,8 +56,8 @@
 		"mdast-util-from-markdown": "2.0.3",
 		"mdast-util-math": "3.0.0",
 		"media-chrome": "^4.19.2",
-		"micromark-extension-math": "3.1.0",
 		"mermaid": "^11.17.0",
+		"micromark-extension-math": "3.1.0",
 		"motion": "^13.1.1",
 		"nanoid": "^6.0.1",
 		"next": "^16.4.3",
@@ -82,6 +83,7 @@
 	"devDependencies": {
 		"@next/eslint-plugin-next": "^16.4.3",
 		"@tailwindcss/postcss": "^4.3.3",
+		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24.0.0",
 		"@types/react": "^19.2.18",
 		"@types/react-dom": "^19.2.4",

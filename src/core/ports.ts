@@ -27,6 +27,8 @@ import type {
 	NotesSource,
 } from "./contracts.ts";
 import type { UserSettings } from "./settings.ts";
+import type { StudyContextState } from "./study-context.ts";
+import type { LearnerModelState } from "./learner-model.ts";
 
 // ─── ChatStore — the session record's home (data/chats) ─────────────────────
 
@@ -184,6 +186,25 @@ export interface SettingsStore {
 	readSettings(): UserSettings | null;
 	/** Persist the record (replace-whole). Callers pass a SANITIZED record. */
 	writeSettings(settings: UserSettings): void;
+}
+
+// ─── StudyContextStore — Stage 1 minimum goal/target/reference state ───────
+
+/**
+ * Transitional port for Stage 1 contract work: a single replace-whole record
+ * (versioned StudyContextState) with server-owned operation orchestration.
+ */
+export interface StudyContextStore {
+	readStudyContext(): StudyContextState | null;
+	writeStudyContext(state: StudyContextState): void;
+}
+
+// ─── LearnerModelStore — Stage 2 target-scoped learner organisation ────────
+
+/** One immutable-versioned learner model per existing study target. */
+export interface LearnerModelStore {
+	readLearnerModel(targetId: string): LearnerModelState | null;
+	writeLearnerModel(state: LearnerModelState): void;
 }
 
 // ─── PromptOverrideStore — per-segment system-prompt overrides (2026-09-19) ──

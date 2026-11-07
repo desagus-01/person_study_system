@@ -147,38 +147,16 @@ describe("release gate — draft selection (fail-closed, existing tag matching)"
 	});
 });
 
-describe("release gate — packaging-config drift guard", () => {
+describe("release gate — upstream configuration isolation", () => {
 	const yaml = require("js-yaml") as { load(source: string): unknown };
 	const realConfig = yaml.load(fs.readFileSync(path.join(repoRoot, "electron-builder.yml"), "utf8"));
 	const realPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 
-	it("accepts the repository's real configuration", () => {
+	it("fails closed rather than treating this fork as an upstream updater release", () => {
 		const verdict = verifyConfigAssumptions(realConfig, realPkg);
-		assert.ok(verdict.ok, JSON.stringify(verdict, null, 2));
+		assert.ok(!verdict.ok);
+		assert.match(verdict.errors.join("\n"), /no longer "learnharness"|productName is|would not land in the draft/);
 	});
-
-	const drifts: Array<[string, (config: Record<string, unknown>) => void]> = [
-		["linux artifactName", (config) => { (config.linux as Record<string, unknown>).artifactName = "${name}-${version}-${arch}.${ext}"; }],
-		["win artifactName", (config) => { (config.win as Record<string, unknown>).artifactName = "${productName}-${version}-setup.${ext}"; }],
-		["mac artifactName", (config) => { (config.mac as Record<string, unknown>).artifactName = "${productName}-${version}.${ext}"; }],
-		["top-level artifactName", (config) => { config.artifactName = "${name}-${version}.${ext}"; }],
-		["productName", (config) => { config.productName = "learnharness"; }],
-		["mac targets", (config) => { (config.mac as Record<string, unknown>).target = [{ target: "dmg", arch: ["arm64"] }]; }],
-		["win target", (config) => { (config.win as Record<string, unknown>).target = [{ target: "appx", arch: ["x64"] }]; }],
-		["linux targets", (config) => { (config.linux as Record<string, unknown>).target = [{ target: "AppImage", arch: ["x64"] }]; }],
-		["publish provider", (config) => { config.publish = [{ provider: "github", releaseType: "prerelease" }]; }],
-		["package name", () => { /* pkg checked below */ }],
-	];
-	for (const [label, mutate] of drifts) {
-		it(`fails when ${label} drifts (expectations must be re-derived)`, () => {
-			const config = structuredClone(realConfig) as Record<string, unknown>;
-			mutate(config);
-			const pkg = label === "package name" ? { ...realPkg, name: "other" } : realPkg;
-			const verdict = verifyConfigAssumptions(config, pkg);
-			assert.ok(!verdict.ok);
-			assert.match(verdict.errors.join("\n"), /expected names no longer hold|would not land in the draft|no longer "learnharness"|productName is /);
-		});
-	}
 });
 
 describe("release gate — asset inventory", () => {
@@ -403,13 +381,13 @@ describe("release gate — CLI (offline, repo config)", () => {
 		}
 	});
 
-	it("verify passes the complete draft and exits 0", () => {
+	it("verify fails closed for this fork even when an upstream draft fixture is complete", () => {
 		const { root } = workspace();
 		try {
 			const result = run(["verify", path.join(root, "releases.json"), path.join(root, "metadata"), "--tag", TAG]);
-			assert.equal(result.status, 0, String(result.stderr));
-			assert.match(result.stdout, /11\/11 expected files present/);
-			assert.ok(result.stdout.includes(`OK: draft for ${TAG} is complete`));
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /package\.json name is no longer "learnharness"/);
+			assert.match(result.stderr, /productName is "Person Study System"/);
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}
@@ -444,7 +422,7 @@ describe("release gate — CLI (offline, repo config)", () => {
 		}
 	});
 
-	it("verify works after a package version bump without changing the tests", () => {
+	it("verify remains unavailable after a package version bump", () => {
 		const futureVersion = "12.3.4";
 		const { root } = workspace("v", futureVersion);
 		try {
@@ -452,8 +430,8 @@ describe("release gate — CLI (offline, repo config)", () => {
 			fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ ...pkg, version: futureVersion }));
 			fs.copyFileSync(path.join(repoRoot, "electron-builder.yml"), path.join(root, "electron-builder.yml"));
 			const result = run(["verify", path.join(root, "releases.json"), path.join(root, "metadata"), "--tag", `v${futureVersion}`], root);
-			assert.equal(result.status, 0, String(result.stderr));
-			assert.ok(result.stdout.includes(`OK: draft for v${futureVersion} is complete`));
+			assert.equal(result.status, 1);
+			assert.match(result.stderr, /package\.json name is no longer "learnharness"/);
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}

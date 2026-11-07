@@ -42,14 +42,12 @@ const path = require("node:path");
 // renderer owns the number; this is the IPC widen target).
 const SIDEBAR_AUTOCLOSE = 928;
 
-const PRODUCT_NAME = "LearnHarness";
+const PRODUCT_NAME = "Person Study System";
 
-// APP NAME → userData (owner, 2026-10-10): the Application Support dir is
-// exactly "LearnHarness" in dev AND packaged. Packaged Electron would
-// otherwise derive it from package.json "name" (now lowercase
-// "learnharness"), and productName metadata alone doesn't reach app.name.
+// APP NAME → userData: establish the fork's own data root in development and
+// packaged Electron. productName metadata alone does not set app.name.
 // Must run before the LH_DEV_URL suffix below — dev becomes
-// "LearnHarness-dev".
+// "Person Study System-dev".
 app.setName(PRODUCT_NAME);
 const AUTH_FILE = () => path.join(app.getPath("userData"), "auth.json");
 const DATA_DIR = () => path.join(app.getPath("userData"), "data");
@@ -410,37 +408,12 @@ function createWindow(url) {
  * lights, is impossible without rebuilding the window). */
 const ZOOM_LADDER = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
-/* ── Auto-update (Wave C, owner 2026-10-10: silent download + restart ─────
- * banner; checks at startup + every 24h) ─────────────────────────────────
+/* ── Updates ─────────────────────────────────────────────────────────────
  *
- * Feed: GitHub Releases (electron-builder.yml publish → app-update.yml,
- * baked + signed into the bundle). macOS needs the app signed (it is —
- * Developer ID) and updates ride the zip target (Squirrel.Mac); blockmaps
- * give differential downloads for free. Windows uses NSIS; Linux uses
- * AppImage or DebUpdater (6.8.9 supports deb; installation can request
- * administrator permission via the package manager — owner 2026-10-11).
- *
- * Hard rules:
- *  - DEV NEVER UPDATES: !app.isPackaged skips the updater entirely — the
- *    dev world runs `next dev` and has no signed bundle.
- *  - THE UPDATER CAN NEVER TAKE THE APP DOWN: every event and check is
- *    caught and logged (feed down, disk full, bad signature — all just
- *    log lines; the app keeps working, update or no update).
- *  - LH_UPDATE_FEED (env): overrides the baked GitHub feed with a generic
- *    local server — the pre-release verification drill (serve
- *    latest-mac.yml + zip + blockmap from any localhost HTTP dir and
- *    watch a real installed copy find/download/restart). Test-only seam.
- *
- * Install path: the downloaded update applies on quit (autoInstallOnAppQuit
- * — Squirrel.Mac stages natively and swaps on relaunch). The renderer
- * banner asks for an immediate restart via "lh:update-install"; we kill
- * the child server FIRST — deterministic ordering: the server lives
- * inside the .app bundle Squirrel is about to replace (extraResources),
- * and before-quit alone would race the swap. */
-const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
-let autoUpdater = null; // electron-updater's, packaged builds only
-// Observational only: this snapshot NEVER gates a check, download or install.
-// The revision lets late subscribers reject an older in-flight IPC snapshot.
+ * Person Study System has no approved release feed. Packaged builds must not
+ * contact the upstream LearnHarness feed, accept LH_UPDATE_FEED overrides, or
+ * download/install updates. Keep the read-only status bridge so Settings can
+ * explicitly report that updates are unavailable. */
 let updateState = { status: "idle", version: null, revision: 0 };
 
 function reportUpdateStatus(status, version = null) {
@@ -460,108 +433,9 @@ function reportUpdateStatus(status, version = null) {
 	}
 }
 
-/** Read the SAME data directory passed to the packaged server. Only an
- * explicit false opts out; absent/corrupt/unreadable settings keep updates ON.
- * Re-read for each automatic check so saving the toggle needs no restart. */
-function automaticUpdatesEnabled() {
-	try {
-		const settings = JSON.parse(fs.readFileSync(path.join(DATA_DIR(), "settings.json"), "utf8"));
-		return settings?.general?.autoUpdate !== false;
-	} catch {
-		return true;
-	}
-}
-
-function checkForUpdates({ manual = false } = {}) {
-	if (!autoUpdater) return;
-	if (!manual && !automaticUpdatesEnabled()) {
-		log("auto-update: automatic check skipped (turned off in Settings)");
-		return;
-	}
-	// Do not gate on display state: a stale spinner/error must never disable
-	// future background checks. electron-updater owns its in-flight work.
-	autoUpdater
-		.checkForUpdates()
-		.then((result) => {
-			// A declined check (e.g. an unsupported package) establishes no
-			// latest-version claim. Real results arrive through updater events.
-			if (!result) reportUpdateStatus("idle");
-		})
-		.catch((err) => {
-			log(`update check failed: ${err?.message ?? err}`);
-			reportUpdateStatus("error");
-		});
-}
-
-function installUpdateNow() {
-	// Kill the server BEFORE the quit-and-install (see block comment).
-	try {
-		killServer();
-	} catch {
-		/* already dead */
-	}
-	autoUpdater?.quitAndInstall();
-}
-
 function setupAutoUpdater() {
-	if (!app.isPackaged) {
-		log("auto-update: dev build — updater disabled");
-		reportUpdateStatus("disabled");
-		return;
-	}
-	try {
-		autoUpdater = require("electron-updater").autoUpdater;
-	} catch (err) {
-		log(`auto-update: electron-updater unavailable (${err?.message ?? err}) — updates disabled`);
-		reportUpdateStatus("disabled");
-		return;
-	}
-	const feed = process.env.LH_UPDATE_FEED;
-	if (feed) {
-		autoUpdater.setFeedURL({ provider: "generic", url: feed });
-		log(`auto-update: LH_UPDATE_FEED override → ${feed}`);
-	}
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = true;
-	// Route every updater log line through the shell's own log (userData/
-	// logs/main.log) — feed failures must be diagnosable after the fact.
-	autoUpdater.logger = {
-		info: (m) => log(`updater: ${m}`),
-		warn: (m) => log(`updater warn: ${m}`),
-		debug: (m) => {}, // too chatty for the persistent log
-		error: (m) => log(`updater error: ${m}`),
-	};
-	autoUpdater.on("checking-for-update", () => reportUpdateStatus("checking"));
-	autoUpdater.on("update-available", (info) => reportUpdateStatus("downloading", info?.version));
-	autoUpdater.on("update-not-available", () => reportUpdateStatus("up-to-date"));
-	autoUpdater.on("update-downloaded", (info) => {
-		log(`update downloaded: ${info?.version} — banner shown`);
-		reportUpdateStatus("downloaded", info?.version);
-	});
-	autoUpdater.on("error", (err) => {
-		log(`updater error: ${err?.message ?? err}`);
-		reportUpdateStatus("error");
-	});
-}
-
-/** One result surface for manual checks. Preload buffers the navigation
- * request until React subscribes, including when all macOS windows closed. */
-function checkForUpdatesFromMenu() {
-	try {
-		const win = BrowserWindow.getAllWindows()[0] ?? reopenWindow?.();
-		if (win) {
-			if (win.isMinimized()) win.restore();
-			win.focus();
-			const openSettings = () => {
-				try { win.webContents.send("lh:open-settings", "general"); } catch { /* window closed */ }
-			};
-			if (win.webContents.isLoadingMainFrame()) win.webContents.once("did-finish-load", openSettings);
-			else openSettings();
-		}
-	} catch {
-		/* Navigation failure must not prevent the manual check. */
-	}
-	checkForUpdates({ manual: true });
+	log("updates unavailable: no release feed is configured for Person Study System");
+	reportUpdateStatus("disabled");
 }
 
 function zoomStep(win, dir) {
@@ -587,9 +461,6 @@ function installMenu() {
 			label: app.name,
 			submenu: [
 				{ role: "about" },
-				// Manual checks report their result in Settings → General.
-				{ label: "Check for Updates…", click: () => checkForUpdatesFromMenu() },
-				{ type: "separator" },
 				{ role: "hide" },
 				{ role: "hideOthers" },
 				{ type: "separator" },
@@ -711,19 +582,14 @@ async function main() {
 
 	installMenu();
 
-	// Auto-update (Wave C): wire the updater before the window so the
-	// banner channel is live from first paint; the first check and the 24h
-	// interval fire after it below. setupAutoUpdater's contract: failures
-	// are log lines — this can never block boot.
 	setupAutoUpdater();
-	ipcMain.on("lh:update-install", () => installUpdateNow());
 	ipcMain.handle("lh:update:get", (event) => {
 		if (!trustedAppWindows.has(BrowserWindow.fromWebContents(event.sender)) || !trustedSender(event, new URL(url).origin, BrowserWindow)) throw new Error("Untrusted desktop request.");
 		return updateState;
 	});
 	ipcMain.handle("lh:update:check", (event) => {
 		if (!trustedAppWindows.has(BrowserWindow.fromWebContents(event.sender)) || !trustedSender(event, new URL(url).origin, BrowserWindow)) throw new Error("Untrusted desktop request.");
-		checkForUpdates({ manual: true });
+		return updateState;
 	});
 
 	// Sidebar-at-narrow-window (owner, 2026-09-17): the renderer auto-closes
@@ -747,10 +613,4 @@ async function main() {
 	});
 	createWindow(url);
 	log(`window open: ${url}`);
-	// Startup + 24h checks stay main-owned and read the current preference.
-	// No renderer subscription is required; late loads retrieve the snapshot.
-	if (autoUpdater) {
-		checkForUpdates();
-		setInterval(() => checkForUpdates(), UPDATE_CHECK_INTERVAL_MS);
-	}
 }

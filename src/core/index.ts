@@ -22,6 +22,8 @@ export * from "./source-organization.ts";
 export * from "./source-selection.ts";
 export * from "./source-label.ts";
 export * from "./render-settings.ts";
+export * from "./study-context.ts";
+export * from "./learner-model.ts";
 
 export * from "./question-core.ts";
 // The event bus (push architecture, 2026-10-02): vocabulary + emit/subscribe

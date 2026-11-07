@@ -1,5 +1,11 @@
 # Desktop builds and releases
 
+> **Fork status (Stage 0):** packaged builds identify as **Person Study System**
+> and use a separate local app/data identity. In-app updates are disabled: this
+> fork has no approved release feed and must not consume LearnHarness releases.
+> The remaining upstream packaging notes are retained as reference only until a
+> separately approved release policy replaces them.
+
 ## Platforms
 
 | Platform | Build runner | Packages | In-app update |
@@ -109,10 +115,15 @@ The workflow maps the certificate secrets to electron-builder's `CSC_LINK` / `CS
 
 Changes to the shell, native modules, packaging/updater configuration, or Electron itself warrant relevant platform smoke checks: install/open, window controls/dragging, zoom, setup and session resume, native PDF/SVG tools, and the demo helper. Offline fixture gates prove their exercised paths, not real account/provider functionality; do not repeat already accepted feature testing without a concrete risk.
 
-## In-app updates and website notification
+## In-app updates
 
-Packaged apps check at startup and every 24 hours by default, download available updates automatically, and install downloaded updates on quit or through Restart. **Settings → General** shows version/release notes, manual Check for updates, status, and Automatic updates. Turning automatic checks off does not cancel downloads or staged installs; a manual check still downloads available updates. Development builds disable the updater. Errors are logged to `userData/logs/main.log` without taking down the app. The test-only `LH_UPDATE_FEED` environment override points to a generic feed for an authorized local update drill.
+In-app updates are disabled for Person Study System. The Electron shell always
+reports **Updates unavailable**; it does not bundle or load `electron-updater`,
+contact an update feed, accept `LH_UPDATE_FEED`, download an update, or offer update
+controls. `electron-builder.yml` has no publish target. Do not configure a
+feed or restore updater behavior without an approved package/release policy
+and isolation tests for this fork.
 
-Sources: [`electron/main.cjs`](../electron/main.cjs), [`electron/preload.cjs`](../electron/preload.cjs), and [`update-settings.tsx`](../components/settings/update-settings.tsx).
-
-After a stable release is published, [`.github/workflows/notify-website.yml`](../.github/workflows/notify-website.yml) dispatches `desktop-release-published` with the tag to `amosblomqvist/learnharness-web`, using the separately scoped `WEBSITE_DISPATCH_TOKEN` secret. Drafts and prereleases do not trigger that job. A successful HTTP 204 means the website update was **queued**, not that deployment or public links have been verified.
+Sources: [`electron/main.cjs`](../electron/main.cjs),
+[`electron-builder.yml`](../electron-builder.yml), and
+[`update-settings.tsx`](../components/settings/update-settings.tsx).

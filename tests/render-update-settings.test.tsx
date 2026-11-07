@@ -79,7 +79,7 @@ describe("version and contextual copy", () => {
 	it("never claims live/latest information and keeps updater errors generic", () => {
 		assert.equal(updateStatusText(null), null);
 		assert.equal(updateStatusText(state()), null);
-		assert.equal(updateStatusText(state({ status: "disabled" })), null);
+		assert.equal(updateStatusText(state({ status: "disabled" })), "Updates are unavailable for this build.");
 		assert.equal(updateStatusText(state({ status: "checking" })), "Checking for updates…");
 		assert.equal(updateStatusText(state({ status: "downloading", version: "0.3.8" })), "Downloading version 0.3.8…");
 		assert.equal(updateStatusText(state({ status: "up-to-date" })), "No newer version was found at the last check.");
@@ -91,18 +91,20 @@ describe("version and contextual copy", () => {
 });
 
 describe("General update rows", () => {
-	it("browser/SSR shows version and installed-version release notes, without inactive controls or claims", () => {
+	it("browser/SSR shows only version information while updates are unavailable", () => {
 		const html = renderToStaticMarkup(<UpdateSettings {...props} />);
 		assert.ok(html.includes("Version 0.3.7"));
-		assert.ok(html.includes(`${props.homepage}/releases/tag/v0.3.7`));
+		assert.ok(!html.includes(`${props.homepage}/releases/tag/v0.3.7`));
 		assert.ok(!html.includes("update-check")); assert.ok(!html.includes("row-auto-update"));
 		assert.ok(!html.includes(MANUAL_UPDATE_HINT)); assert.ok(!html.includes("update-status"));
 	});
 
-	it("unpackaged/unavailable updater shows the version-only surface", async () => {
+	it("unpackaged/unavailable updater explicitly reports that updates are unavailable", async () => {
 		const b = bridge(state({ status: "disabled" })); const host = await mount(<UpdateSettings {...props} />);
 		assert.ok(q(host, "row-version")); assert.equal(q(host, "update-check"), null);
 		assert.equal(q(host, "row-auto-update"), null); assert.equal(b.calls.check, 0);
+		assert.equal(q(host, "update-status")!.textContent, "Updates are unavailable for this build.");
+		assert.equal(q(host, "release-notes"), null);
 	});
 
 	it("idle shows two rows and clear consequences; opening Settings never checks", async () => {

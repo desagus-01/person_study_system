@@ -113,6 +113,9 @@ export const GRAPH_FORMAT_FILE = path.join(PATHS.graph, "format.json");
  */
 export const SETTINGS_FILE = path.join(DATA_ROOT, "settings.json");
 
+/** Stage-1 learning subsystem database (SQLite). */
+export const LEARNING_DB_FILE = path.join(DATA_ROOT, "learning.sqlite");
+
 /**
  * User prompt-override files (settings-storage wave, 2026-09-19): the
  * per-segment system-prompt overrides mirroring the SOURCE layout
